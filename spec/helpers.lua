@@ -2763,6 +2763,67 @@ local function clustering_client(opts)
   return nil, "unknown frame from CP: " .. (typ or err)
 end
 
+local function get_kong_workers()
+  local workers
+  wait_until(function()
+    local pok, admin_client = pcall(admin_client)
+    if not pok then
+      return false
+    end
+    local res = admin_client:send {
+      method = "GET",
+      path = "/",
+    }
+    if not res or res.status ~= 200 then
+      return false
+    end
+    local body = luassert.has.status(200, res)
+    local json = cjson.decode(body)
+
+    admin_client:close()
+    workers = json.pids.workers
+    return true
+  end, 10)
+  return workers
+end
+
+
+local function wait_until_no_common_workers(workers, expected_total, strategy)
+  if strategy == "cassandra" then
+    ngx.sleep(0.5)
+  end
+  wait_until(function()
+    local pok, admin_client = pcall(admin_client)
+    if not pok then
+      return false
+    end
+    local res = assert(admin_client:send {
+      method = "GET",
+      path = "/",
+    })
+    luassert.has.status(200, res)
+    local json = cjson.decode(luassert.has.status(200, res))
+    admin_client:close()
+
+    local new_workers = json.pids.workers
+    local total = 0
+    local common = 0
+    if new_workers then
+      for _, v in ipairs(new_workers) do
+        total = total + 1
+        for _, v_old in ipairs(workers) do
+          if v == v_old then
+            common = common + 1
+            break
+          end
+        end
+      end
+    end
+    return common == 0 and total == (expected_total or total)
+  end)
+end
+
+
 
 ----------------
 -- Variables/constants
@@ -2870,6 +2931,8 @@ end
   clustering_client = clustering_client,
   https_server = https_server,
   stress_generator = stress_generator,
+  get_kong_workers = get_kong_workers,
+  wait_until_no_common_workers = wait_until_no_common_workers,
 
   -- miscellaneous
   intercept = intercept,
