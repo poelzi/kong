@@ -609,6 +609,13 @@ local MetaSchema = Schema.new({
       },
     },
     {
+      unique_key = {
+        type = "array",
+        elements = { type = "string" },
+        nilable = true,
+      },
+    },
+    {
       generate_admin_api = {
         type = "boolean",
         nilable = true,
